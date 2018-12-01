@@ -30,7 +30,6 @@ const languages = [
   'golang',
   'rust',
   'javascript',
-  'markdown',
 ];
 
 languages.forEach(lang => {
@@ -38,11 +37,7 @@ languages.forEach(lang => {
 });
 
 const themes = [
-  // dark
   'terminal',
-  'monokai',
-  // bright
-  'github'
 ];
 
 themes.forEach(theme => {
@@ -109,20 +104,21 @@ class SnippetEditorContainer extends Component {
           text={this.state.snippet_text}
           handleChange={this.handleEditorTextChange}
         />
-        <Field isGrouped>
-          <Control>
+        <br/>
+        <Columns isGrid>
+          <Column isSize="narrow">
             <Button isColor="link">Save</Button>
-          </Control>
-          <Control>
+          </Column>
+          <Column isSize="narrow">
             <Button isColor="primary">Lock</Button>
-          </Control>
-          <Control>
-            <Button isColor="primary">Copy to Clipboard</Button>
-          </Control>
-          <Control>
-            <Button isColor="primary">Download file</Button>
-          </Control>
-        </Field>
+          </Column>
+          <Column isSize="narrow">
+            <Button isColor="primary">Copy to clipboard</Button>
+          </Column>
+          <Column isSize="narrow">
+            <Button isColor="primary">Download</Button>
+          </Column>
+        </Columns>
       </>
     )
   }
