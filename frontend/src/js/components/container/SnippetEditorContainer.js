@@ -44,6 +44,10 @@ themes.forEach(theme => {
   require(`brace/theme/${theme}`);
 });
 
+function getCurrEpochSeconds() {
+  return Math.floor(Date.now() / 1000);
+}
+
 class SnippetEditorContainer extends Component {
   constructor(props) {
     super(props);
@@ -62,6 +66,7 @@ class SnippetEditorContainer extends Component {
     // parent component to update states whenever children component changes.
     this.handleChange = this.handleChange.bind(this);
     this.handleEditorTextChange = this.handleEditorTextChange.bind(this);
+    this.handleSubmit = this.handleSubmit.bind(this);
   }
 
   // general purpose handler for inputs like text / select / Checkbox etc. The idea is container
@@ -78,10 +83,31 @@ class SnippetEditorContainer extends Component {
   handleEditorTextChange(text, event) {
     this.setState({snippet_text: text});
   }
+
+  handleSubmit(event) {
+    // take control on browser behavior on such event by dropping the default behavior
+    event.preventDefault();
+    // use React as integration point since we let it manage all the UI states
+    let fd = new FormData();
+    ['snippet_name', 'snippet_text', 'lang'].forEach(name => fd.append(name, this.state[name]));
+    fd.set('timeExpired', getCurrEpochSeconds());
+
+    // setup xhr and fire it
+    let xhr = new XMLHttpRequest();
+    xhr.addEventListener('load', e => console.log('Submission succeeded and response loaded'));
+    xhr.addEventListener('error', e => console.warn('Submission failed due to reason: '));
+
+    xhr.open('POST', ''.concat('http://', /*document.location.host*/ 'localhost:3000', '/save'));
+    xhr.send(fd);
+  }
+
   render() {
     return (
-      <>
-        <InputField label='Snippet Name' placeholder='dont-say-i-dont-know' />
+      <form onSubmit={this.handleSubmit}>
+        <InputField
+          id='snippet_name' handleChange={this.handleChange}
+          label='Snippet Name' placeholder='dont-say-i-dont-know'
+        />
         <Columns isGrid>
           <Column isSize="narrow">
             <SelectField
@@ -107,10 +133,13 @@ class SnippetEditorContainer extends Component {
         <br/>
         <Columns isGrid>
           <Column isSize="narrow">
-            <Button isColor="link">Save</Button>
+            <Button isColor="link" type="submit">Save</Button>
           </Column>
           <Column isSize="narrow">
             <Button isColor="primary">Lock</Button>
+          </Column>
+          <Column isSize="narrow">
+            <Button isColor="primary">Clear</Button>
           </Column>
           <Column isSize="narrow">
             <Button isColor="primary">Copy to clipboard</Button>
@@ -119,7 +148,7 @@ class SnippetEditorContainer extends Component {
             <Button isColor="primary">Download</Button>
           </Column>
         </Columns>
-      </>
+      </form>
     )
   }
 }
@@ -129,7 +158,9 @@ function InputField(props) {
     <Field>
       <Label>{props.label}</Label>
       <Control>
-        <Input isColor="primary" placeholder={props.placeholder} defaultValue={props.defaultValue} />
+        <Input isColor="primary"
+          id={props.id} onChange={props.handleChange}
+          placeholder={props.placeholder} defaultValue={props.defaultValue} />
       </Control>
     </Field>
   )
@@ -181,6 +212,7 @@ function SnippetEditorInput(props) {
         height='500px'
         width='100%'
         fontSize={14}
+        editorProps={{$blockScrolling: true}}
       />
     </Container>
   )
