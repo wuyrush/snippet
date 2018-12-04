@@ -48,11 +48,11 @@ type User struct {
 }
 
 func SaveSnippetHandler(w http.ResponseWriter, req *http.Request) {
-    log.Println("Got request: ", *req)
-    if err := req.ParseForm(); err != nil {
+    log.Println("Got request with method ", req.Method)
+    if err := req.ParseMultipartForm(1 << 10); err != nil {
         log.Fatal("Error when parsing form: ", err)
     }
-    log.Println("Form value: ", req.PostForm)
+    log.Println("Form value: ", req.MultipartForm)
 }
 
 func ViewSnippetHandler(w http.ResponseWriter, req *http.Request) {

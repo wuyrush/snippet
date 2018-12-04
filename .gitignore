@@ -16,3 +16,9 @@ node_modules
 
 # frontend assets generated  by webpack
 frontend/assets
+
+# env configuration
+.env
+
+# scripts and artifacts for dev testing
+dev

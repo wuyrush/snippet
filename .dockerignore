@@ -1,0 +1,12 @@
+# git
+.git*
+
+# environment settings
+.env
+
+# editor
+**/*.swp
+
+# node modules
+node_modules
+

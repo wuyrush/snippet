@@ -1,0 +1,40 @@
+version: '3.7'
+services:
+    frontend:
+        image: snippet:frontend
+        # only expose this port as app entry point to outside world.
+        # Never expose unnecessary ports on containers especially those running our backend / storage layers.
+        ports:
+            - '8000:80/tcp'
+        depends_on:
+            - backend
+        networks:
+            - snippet-net
+        restart: on-failure
+        deploy:
+            replicas: 1
+    backend:
+        image: snippet:backend
+        depends_on:
+            - redis
+        networks:
+            - snippet-net 
+              # restart: on-failure
+        environment:
+            # env vars for application
+            - REDIS_URL=${REDIS_URL}
+            - REDIS_MAX_CONN_POOL_SIZE=${REDIS_MAX_CONN_POOL_SIZE}
+            - REDIS_PASSWD=${REDIS_PASSWD}
+        deploy:
+            replicas: 2
+    redis:
+        image: snippet:redis
+        networks:
+            - snippet-net 
+        restart: on-failure
+        entrypoint: redis-server /redis/redis.conf --requirepass ${REDIS_PASSWD}
+
+# user-defined network is preferred for better security: https://docs.docker.com/network/bridge/  
+networks:
+    snippet-net:
+        driver: bridge

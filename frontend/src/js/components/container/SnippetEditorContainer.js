@@ -90,14 +90,14 @@ class SnippetEditorContainer extends Component {
     // use React as integration point since we let it manage all the UI states
     let fd = new FormData();
     ['snippet_name', 'snippet_text', 'lang'].forEach(name => fd.append(name, this.state[name]));
-    fd.set('timeExpired', getCurrEpochSeconds());
+    fd.set('timeCreated', getCurrEpochSeconds());
 
     // setup xhr and fire it
     let xhr = new XMLHttpRequest();
     xhr.addEventListener('load', e => console.log('Submission succeeded and response loaded'));
     xhr.addEventListener('error', e => console.warn('Submission failed due to reason: '));
 
-    xhr.open('POST', ''.concat('http://', /*document.location.host*/ 'localhost:3000', '/save'));
+    xhr.open('POST', ''.concat('http://', document.location.host, '/save'));
     xhr.send(fd);
   }
 
