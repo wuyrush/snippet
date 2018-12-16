@@ -18,9 +18,12 @@ COPY ./config/redis.conf .
 # application builder image
 FROM golang:alpine as builder
 
-WORKDIR /go/hack/src/github.com/wuyrush/snippet
+WORKDIR /go/src/github.com/wuyrush/snippet
 
-# RUN go get <dependencies>
+# install git to use go get to add application dependencies
+RUN apk update; \
+    apk add git && echo "Git installed";    \
+    go get -d -v github.com/satori/go.uuid
 
 COPY ./main.go .
 
@@ -32,6 +35,6 @@ FROM alpine:latest as backend
 
 WORKDIR /snippet
 
-COPY --from=builder /go/hack/src/github.com/wuyrush/snippet/build/app .
+COPY --from=builder /go/src/github.com/wuyrush/snippet/build/app .
 # note we can pass args via `docker run` if we use the exec form of ENTRYPOINT
 ENTRYPOINT ["./app"]

@@ -25,15 +25,16 @@ import {
 // need them later ... We can have browsers cache them so that only the first load is slow - but
 // keep in mind that slow first load can already kill many user's interest:(  )
 
-const languages = [
+const modes = [
   'python',
   'golang',
   'rust',
   'javascript',
+  'text'
 ];
 
-languages.forEach(lang => {
-  require(`brace/mode/${lang}`);
+modes.forEach(mode => {
+  require(`brace/mode/${mode}`);
 });
 
 const themes = [
@@ -44,17 +45,13 @@ themes.forEach(theme => {
   require(`brace/theme/${theme}`);
 });
 
-function getCurrEpochSeconds() {
-  return Math.floor(Date.now() / 1000);
-}
-
 class SnippetEditorContainer extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      snippet_name: '',
-      snippet_text: '',
-      lang: 'python',
+      snippetName: '',
+      snippetText: '',
+      mode: 'python',
       theme: 'terminal',
       editorLocked: false,
     };
@@ -81,7 +78,7 @@ class SnippetEditorContainer extends Component {
   }
 
   handleEditorTextChange(text, event) {
-    this.setState({snippet_text: text});
+    this.setState({snippetText: text});
   }
 
   handleSubmit(event) {
@@ -89,8 +86,7 @@ class SnippetEditorContainer extends Component {
     event.preventDefault();
     // use React as integration point since we let it manage all the UI states
     let fd = new FormData();
-    ['snippet_name', 'snippet_text', 'lang'].forEach(name => fd.append(name, this.state[name]));
-    fd.set('timeCreated', getCurrEpochSeconds());
+    ['snippetName', 'snippetText', 'mode'].forEach(name => fd.append(name, this.state[name]));
 
     // setup xhr and fire it
     let xhr = new XMLHttpRequest();
@@ -105,29 +101,29 @@ class SnippetEditorContainer extends Component {
     return (
       <form onSubmit={this.handleSubmit}>
         <InputField
-          id='snippet_name' handleChange={this.handleChange}
+          id='snippetName' handleChange={this.handleChange}
           label='Snippet Name' placeholder='dont-say-i-dont-know'
         />
         <Columns isGrid>
           <Column isSize="narrow">
             <SelectField
-              options={languages}
-              label='Language' id='lang' value={this.state.lang}
+              options={modes}
+              label='Mode' id='mode' value={this.state.mode}
               handleChange={this.handleChange}
             />
           </Column>
           <Column isSize="narrow">
             <SelectField
               options={themes}
-              label='Theme' id='theme' value={this.state.lang}
+              label='Theme' id='theme' value={this.state.theme}
               handleChange={this.handleChange}
             />
           </Column>
         </Columns>
         <SnippetEditorInput
-          lang={this.state.lang}
+          mode={this.state.mode}
           theme={this.state.theme}
-          text={this.state.snippet_text}
+          text={this.state.snippetText}
           handleChange={this.handleEditorTextChange}
         />
         <br/>
@@ -203,7 +199,7 @@ function SnippetEditorInput(props) {
   return (
     <Container>
       <AceEditor
-        mode={props.lang}
+        mode={props.mode}
         theme={props.theme}
         value={props.text}
         onChange={props.handleChange}
