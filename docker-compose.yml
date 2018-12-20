@@ -22,9 +22,15 @@ services:
               # restart: on-failure
         environment:
             # env vars for application
+            - HOST=${HOST}
+            - PORT=${PORT}
+            - VERBOSE=${VERBOSE}
+            - SNIPPET_RETENTION_PERIOD_SECONDS=${SNIPPET_RETENTION_PERIOD_SECONDS}
             - REDIS_URL=${REDIS_URL}
             - REDIS_MAX_CONN_POOL_SIZE=${REDIS_MAX_CONN_POOL_SIZE}
             - REDIS_PASSWD=${REDIS_PASSWD}
+            - REDIS_MAX_RETRIES=${REDIS_MAX_RETRIES}
+            - REDIS_MAX_CONN_AGE=${REDIS_MAX_CONN_AGE}
         deploy:
             replicas: 2
     redis:

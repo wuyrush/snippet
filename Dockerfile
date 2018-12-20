@@ -23,9 +23,9 @@ WORKDIR /go/src/github.com/wuyrush/snippet
 # install git to use go get to add application dependencies
 RUN apk update; \
     apk add git && echo "Git installed";    \
-    go get -d -v github.com/satori/go.uuid
+    go get -d -v github.com/satori/go.uuid github.com/Sirupsen/logrus github.com/go-redis/redis github.com/kelseyhightower/envconfig
 
-COPY ./main.go .
+COPY ./*.go ./ 
 
 RUN GOOS=linux go build -v -o ./build/app .
 

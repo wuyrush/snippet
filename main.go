@@ -2,14 +2,16 @@ package main
 
 import (
     "fmt"
-    "flag"
-    "log"
     "net/http"
     "mime/multipart"
     "unicode/utf8"
     "time"
+    "os"
 
     "github.com/satori/go.uuid"
+    "github.com/go-redis/redis"
+    log "github.com/Sirupsen/logrus"
+    "github.com/kelseyhightower/envconfig"
 )
 
 const (
@@ -24,64 +26,35 @@ var supportedModes = map[string]bool{
     "text": true,
 }
 
-/*
-Entities involved in our application:
-
-1. Snippet
-    1. snippet-content
-        1. snippet-name - string
-        1. snippet-body - string
-        1. language of that snippet belongs to (default is text) - string
-    1. TODO: snippet owner - need User entity - user id, string
-    1. Is the snippet open to public? (default to true if not logged in and false if logged in)
-    1. snippet id - string
-    1. expiration time - use epoch time in seconds
-    1. creation time - same as above
-
-We design the snippet content to be immutable once it is saved into our application.
-
-TODO
-2. User
-    1. username - string
-    1. user email for registration and login - string, must be unique
-    1. user password - store the string / byte of password hash
-
-*/
-
-type Snippet struct {
-    Name            string
-    Body            string
-    Mode            string
-    Id              string
-    TimeExpired     int64
-    TimeCreated     int64
-    UserId          string
-}
-
-type User struct {
-    id          string  // user email
-    username    string
-}
+// interface to data storage layer
+var store SnippetStore
 
 func SaveSnippetHandler(w http.ResponseWriter, req *http.Request) {
-    log.Println("Got request with method", req.Method)
     if err := req.ParseMultipartForm(MULTIPART_FORM_BUFFER_SIZE_BYTES); err != nil {
-        log.Fatal("Error when parsing form:", err)
+        log.WithError(err).Error("SaveSnippetHandler: Error when parsing form")
     }
     // validate client input, then generate a snippet object from the input if it is valid
     snippet, err := createSnippet(req.MultipartForm)
     if err != nil {
-        // notify the user about the error
-        log.Println("SaveSnippetHandler: Failed to create snippet.", err)
+        // TODO: notify the user about the error, in form of error notifications
+        log.WithError(err).Error("SaveSnippetHandler: Failed to create snippet.")
         return
     }
-    log.Println("Snippet created:", *snippet)
+    log.WithField("snippetId", snippet.Id).Info("SaveSnippetHandler: Snippet created")
+    // save to storage backend
+    err = store.Save(snippet)
+    if err != nil {
+        // TODO: notify the user about the error, in form of error notifications
+        log.WithError(err).Error("SaveSnippetHandler: Failed to store snippet data")
+        return
+    }
+    log.WithField("snippetId", snippet.Id).Info("SaveSnippetHandler: Snippet saved to data backend")
 }
 
 func createSnippet(form *multipart.Form) (snippet *Snippet, err error) {
     defer func() {
         if e := recover(); e != nil {
-            log.Println("createSnippet: Failed to create snippet from user input.", e)
+            log.WithField("recovered", e).Error("createSnippet: Failed to create snippet from user input.")
             err = &Error{Message: "Unknown service error occurred.", Code: 500, Cause: e}
         }
     }()
@@ -106,12 +79,11 @@ func createSnippet(form *multipart.Form) (snippet *Snippet, err error) {
     // generate snippet id
     snippetUUID, e:= uuid.NewV4()
     if e != nil {
-        errorMsg := "Failed to generate snippet id."
-        log.Println(errorMsg, e)
+        errorMsg := "createSnippet: Failed to generate snippet id."
+        log.WithError(e).Error(errorMsg)
         return nil, &Error{Message: errorMsg, Code: 500, Cause: e}
     }
     snippet.Id = snippetUUID.String()
-
     // set creation and expiration time
     timeCreated := time.Now().UTC()
     snippet.TimeCreated = timeCreated.Unix()
@@ -119,44 +91,62 @@ func createSnippet(form *multipart.Form) (snippet *Snippet, err error) {
         // fall back to default
         snippet.Name = fmt.Sprintf("Snippet created at %s", timeCreated.Format("Mon Jan _2 15:04:05 MST 2006"))
     }
-    snippet.TimeExpired = snippet.TimeCreated + 1800
+    // expire 5 min after saving
+    snippet.TimeExpired = snippet.TimeCreated + 300
 
     return snippet, nil
-}
-
-type Error struct {
-    Message string
-    Code    int
-    Cause   interface{}
-}
-
-func (e *Error) Error() string {
-    // If not explicitly specified, all the error shall be deemed as service-side error since the
-    // service failed to determine what it is.
-    side := "Service"
-    if e.Code >= 400 && e.Code < 500 {
-        side = "Client"
-    }
-    errStr := fmt.Sprintf("%sError: %s", side, e.Message)
-    if e.Cause != nil {
-        errStr += fmt.Sprintf(" Cause: %v", e.Cause)
-    }
-    return errStr
 }
 
 func ViewSnippetHandler(w http.ResponseWriter, req *http.Request) {
     // TODO: returns snippet data from storage backend
 }
 
-func main() {
-    // define application CLI
-    addr := flag.String("addr", ":3000", "service address")
-    flag.Parse()
-
-    http.HandleFunc("/save", SaveSnippetHandler)
-    // start the server
-    err := http.ListenAndServe(*addr, nil)
-    if err != nil {
-        log.Fatal("http.ListenAndServe: ", err)
+func setupLogging(verbose bool) {
+    log.SetFormatter(&log.TextFormatter{
+        DisableColors: false,
+    })
+    log.SetOutput(os.Stdout)
+    log.SetLevel(log.InfoLevel)
+    if verbose {
+        log.SetLevel(log.DebugLevel)
     }
 }
+
+func setupRedis(config *Config) *redis.Client {
+    return redis.NewClient(&redis.Options{
+        Addr: config.RedisUrl,
+        Password: config.RedisPasswd,
+        DB: 0,   // what's the difference between default db and customized one?
+        MaxRetries: config.RedisMaxRetries,
+        MaxConnAge: config.RedisMaxConnAge,
+        PoolSize: config.RedisMaxConnPoolSize,
+    })
+}
+
+func setupStore(config *Config) {
+    redisDB := setupRedis(config)
+    store = &RedisSnippetStore{
+        db: redisDB,
+        retentionTimeSeconds: config.SnippetRetentionPeriodSeconds,
+    }
+}
+
+func main() {
+    var config Config
+    err := envconfig.Process("", &config)
+    if err != nil {
+        log.WithError(err).Fatal("main: Error when reading application configurations.")
+    }
+
+    setupLogging(config.Verbose)
+    setupStore(&config)
+    http.HandleFunc("/save", SaveSnippetHandler)
+    // start the server
+    addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
+    log.WithField("addressToListen", addr).Debug("main: Starting server")
+
+    if err := http.ListenAndServe(addr, nil); err != nil {
+        log.WithError(err).Fatal("main: Error when listening or serving requests")
+    }
+}
+
