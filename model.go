@@ -33,11 +33,11 @@ TODO
 type Snippet struct {
     Name            string  `json:"snippetName"`
     Body            string  `json:"snppetText"`
-    Mode            string  `json:"Mode"`
-    Id              string
-    TimeExpired     int64
-    TimeCreated     int64
-    UserId          string
+    Mode            string  `json:"mode"`
+    Id              string  `json:"-"` // snippet ID is of no use on client side for now
+    TimeExpired     int64   `json:"timeExpired"`
+    TimeCreated     int64   `json:"timeCreated"`
+    UserId          string  `json:"-"`
 }
 
 type User struct {
@@ -50,7 +50,7 @@ type Config struct {
     Host string `required:"true"`
     Port int `required:"true"`
     Verbose bool `default:"false"`
-    SnippetRetentionPeriodSeconds int `split_words:"true" default:300`
+    SnippetRetentionTime time.Duration `split_words:"true" required:"true"`
     RedisUrl string `split_words:"true" required:"true"`
     RedisMaxConnPoolSize int `split_words:"true" default: 10`
     RedisMaxRetries int `split_words:"true" default: 2`

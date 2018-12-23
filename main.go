@@ -7,11 +7,14 @@ import (
     "unicode/utf8"
     "time"
     "os"
+    "encoding/hex"
+    "encoding/json"
 
     "github.com/satori/go.uuid"
     "github.com/go-redis/redis"
     log "github.com/Sirupsen/logrus"
     "github.com/kelseyhightower/envconfig"
+    "github.com/gorilla/mux"
 )
 
 const (
@@ -49,6 +52,7 @@ func SaveSnippetHandler(w http.ResponseWriter, req *http.Request) {
         return
     }
     log.WithField("snippetId", snippet.Id).Info("SaveSnippetHandler: Snippet saved to data backend")
+    w.WriteHeader(200)
 }
 
 func createSnippet(form *multipart.Form) (snippet *Snippet, err error) {
@@ -83,7 +87,8 @@ func createSnippet(form *multipart.Form) (snippet *Snippet, err error) {
         log.WithError(e).Error(errorMsg)
         return nil, &Error{Message: errorMsg, Code: 500, Cause: e}
     }
-    snippet.Id = snippetUUID.String()
+    // discard dashes since it complicates id validation
+    snippet.Id = hex.EncodeToString(snippetUUID.Bytes())
     // set creation and expiration time
     timeCreated := time.Now().UTC()
     snippet.TimeCreated = timeCreated.Unix()
@@ -98,13 +103,39 @@ func createSnippet(form *multipart.Form) (snippet *Snippet, err error) {
 }
 
 func ViewSnippetHandler(w http.ResponseWriter, req *http.Request) {
-    // TODO: returns snippet data from storage backend
+    snippetId := mux.Vars(req)["id"]
+    // retrieve snippet data from storage backend
+    snippet, err := store.Get(snippetId)
+    if err != nil {
+        log.WithError(err).Errorf("Failed to retrieve data of snippet with id %s", snippetId)
+        switch e := err.(type) {
+        case *Error:
+            http.NotFound(w, req)
+            return
+        default:
+            // TODO: service-side error. Notify user
+            _ = e
+        }
+    }
+    // Got the snippet with expected id. Return it in form of JSON
+    log.WithField("snippetData", *snippet).Info("Retrieved snippet data successfully")
+    jsonBlob, err := json.Marshal(snippet)
+    if err != nil {
+        log.WithError(err).Errorf("Failed to jsonify data of snippet with id %s", snippetId)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json; charset=utf-8")
+    // TODO: maybe we should use closures to handle such boilerplate error handling logic
+    if _, err = w.Write(jsonBlob); err != nil {
+        log.WithError(err).Errorf("Failed to write response data back to client for snippet with id %s",
+            snippetId)
+    }
 }
 
 func setupLogging(verbose bool) {
-    log.SetFormatter(&log.TextFormatter{
-        DisableColors: false,
-    })
+    // use JSON format so that the resulting log entries are easy to be consumed by log analyzers
+    log.SetFormatter(&log.JSONFormatter{})
     log.SetOutput(os.Stdout)
     log.SetLevel(log.InfoLevel)
     if verbose {
@@ -127,7 +158,7 @@ func setupStore(config *Config) {
     redisDB := setupRedis(config)
     store = &RedisSnippetStore{
         db: redisDB,
-        retentionTimeSeconds: config.SnippetRetentionPeriodSeconds,
+        retentionTime: config.SnippetRetentionTime,
     }
 }
 
@@ -140,7 +171,13 @@ func main() {
 
     setupLogging(config.Verbose)
     setupStore(&config)
-    http.HandleFunc("/save", SaveSnippetHandler)
+
+    // setup router
+    r := mux.NewRouter()
+    r.HandleFunc("/view/{id:[0-9a-f]{32}}", ViewSnippetHandler).Methods("GET")
+    r.HandleFunc("/save", SaveSnippetHandler).Methods("POST")
+    // hook the router to standard server mux
+    http.Handle("/", r)
     // start the server
     addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
     log.WithField("addressToListen", addr).Debug("main: Starting server")
