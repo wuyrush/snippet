@@ -1,6 +1,7 @@
 package main
 
 import (
+    "fmt"
     "time"
     "strconv"
     "github.com/go-redis/redis"
@@ -23,7 +24,7 @@ func (store *RedisSnippetStore) Get(snippetId string) (*Snippet, error) {
     log.WithFields(log.Fields{
         "mapFromRedius": re,
         "error": err,
-    }).Debug("Inspect result from redis")
+    }).Debug("Got result from redis")
 
     if err != nil {
         log.WithError(err).Errorf("Failed to get data of snippet %s from Redis.", snippetId)
@@ -35,7 +36,7 @@ func (store *RedisSnippetStore) Get(snippetId string) (*Snippet, error) {
     } else if len(re) == 0 {
         // snippet with specified id not in redis - already expired
         return nil, &Error{
-            Message: "snippet data not found",
+            Message: fmt.Sprintf("Data for snippet %s not found", snippetId),
             Code: 404,
         }
     }

@@ -21,47 +21,56 @@ const (
     MULTIPART_FORM_BUFFER_SIZE_BYTES = 1 << 12
 )
 
-var supportedModes = map[string]bool{
-    "python": true,
-    "golang": true,
-    "rust":   true,
-    "javascript": true,
-    "text": true,
-}
-
-// interface to data storage layer
-var store SnippetStore
+var (
+    SnippetRetentionTime time.Duration
+    store SnippetStore
+    supportedModes = map[string]bool{
+        "python": true,
+        "golang": true,
+        "rust":   true,
+        "javascript": true,
+        "text": true,
+    }
+)
 
 func SaveSnippetHandler(w http.ResponseWriter, req *http.Request) {
     if err := req.ParseMultipartForm(MULTIPART_FORM_BUFFER_SIZE_BYTES); err != nil {
         log.WithError(err).Error("SaveSnippetHandler: Error when parsing form")
+        writeError(w, 400, "Got malformed form data")
+        return
     }
     // validate client input, then generate a snippet object from the input if it is valid
     snippet, err := createSnippet(req.MultipartForm)
     if err != nil {
-        // TODO: notify the user about the error, in form of error notifications
         log.WithError(err).Error("SaveSnippetHandler: Failed to create snippet.")
+        if e, ok := err.(*Error); ok {
+            writeError(w, e.Code, e.Error())
+            return
+        }
+        w.WriteHeader(500)
         return
     }
     log.WithField("snippetId", snippet.Id).Info("SaveSnippetHandler: Snippet created")
     // save to storage backend
     err = store.Save(snippet)
     if err != nil {
-        // TODO: notify the user about the error, in form of error notifications
         log.WithError(err).Error("SaveSnippetHandler: Failed to store snippet data")
+        w.WriteHeader(500)
         return
     }
-    log.WithField("snippetId", snippet.Id).Info("SaveSnippetHandler: Snippet saved to data backend")
-    w.WriteHeader(200)
+    log.WithField("snippetId", snippet.Id).Info("SaveSnippetHandler: Snippet saved to storage")
+    // respond with snippet id so that client is able to view the saved snippet
+    resp := struct{
+        Id string `json:"snippetId"`
+    }{ snippet.Id }
+    if jsonBlob, err := json.Marshal(resp); err != nil {
+        writeError(w, 500, "Failed to generated response data")
+    } else if _, err = w.Write(jsonBlob); err != nil {
+        log.WithError(err).Error("SaveSnippetHandler: Failed to write response to client")
+    }
 }
 
 func createSnippet(form *multipart.Form) (snippet *Snippet, err error) {
-    defer func() {
-        if e := recover(); e != nil {
-            log.WithField("recovered", e).Error("createSnippet: Failed to create snippet from user input.")
-            err = &Error{Message: "Unknown service error occurred.", Code: 500, Cause: e}
-        }
-    }()
     values := form.Value
     if len(values["snippetName"]) == 0 || len(values["snippetText"]) == 0 || len(values["mode"]) == 0 {
         return nil, &Error{Message: "Missing form field", Code: 400}
@@ -83,9 +92,8 @@ func createSnippet(form *multipart.Form) (snippet *Snippet, err error) {
     // generate snippet id
     snippetUUID, e:= uuid.NewV4()
     if e != nil {
-        errorMsg := "createSnippet: Failed to generate snippet id."
-        log.WithError(e).Error(errorMsg)
-        return nil, &Error{Message: errorMsg, Code: 500, Cause: e}
+        log.WithError(e).Error("createSnippet: Failed to generate snippet id.")
+        return nil, &Error{Message: "Failed to generate ID for the snippet", Code: 500, Cause: e}
     }
     // discard dashes since it complicates id validation
     snippet.Id = hex.EncodeToString(snippetUUID.Bytes())
@@ -96,8 +104,7 @@ func createSnippet(form *multipart.Form) (snippet *Snippet, err error) {
         // fall back to default
         snippet.Name = fmt.Sprintf("Snippet created at %s", timeCreated.Format("Mon Jan _2 15:04:05 MST 2006"))
     }
-    // expire 5 min after saving
-    snippet.TimeExpired = snippet.TimeCreated + 300
+    snippet.TimeExpired = snippet.TimeCreated + int64(SnippetRetentionTime.Seconds())
 
     return snippet, nil
 }
@@ -108,20 +115,19 @@ func ViewSnippetHandler(w http.ResponseWriter, req *http.Request) {
     snippet, err := store.Get(snippetId)
     if err != nil {
         log.WithError(err).Errorf("Failed to retrieve data of snippet with id %s", snippetId)
-        switch e := err.(type) {
-        case *Error:
-            http.NotFound(w, req)
+        if e, ok := err.(*Error); ok {
+            writeError(w, e.Code, e.Error())
             return
-        default:
-            // TODO: service-side error. Notify user
-            _ = e
         }
+        w.WriteHeader(500)
+        return
     }
     // Got the snippet with expected id. Return it in form of JSON
     log.WithField("snippetData", *snippet).Info("Retrieved snippet data successfully")
     jsonBlob, err := json.Marshal(snippet)
     if err != nil {
         log.WithError(err).Errorf("Failed to jsonify data of snippet with id %s", snippetId)
+        writeError(w, 500, "Got malformed snippet data")
         return
     }
 
@@ -132,6 +138,14 @@ func ViewSnippetHandler(w http.ResponseWriter, req *http.Request) {
             snippetId)
     }
 }
+
+func writeError(w http.ResponseWriter, statusCode int, message string) {
+    w.WriteHeader(statusCode)
+    if _, err := w.Write([]byte(message)); err != nil {
+        log.WithError(err).Error("writeError: Got error when writing data to client", err)
+    }
+}
+
 
 func setupLogging(verbose bool) {
     // use JSON format so that the resulting log entries are easy to be consumed by log analyzers
@@ -171,6 +185,7 @@ func main() {
 
     setupLogging(config.Verbose)
     setupStore(&config)
+    SnippetRetentionTime = config.SnippetRetentionTime
 
     // setup router
     r := mux.NewRouter()

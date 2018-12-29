@@ -32,7 +32,7 @@ TODO
 // models snippets
 type Snippet struct {
     Name            string  `json:"snippetName"`
-    Body            string  `json:"snppetText"`
+    Body            string  `json:"snippetText"`
     Mode            string  `json:"mode"`
     Id              string  `json:"-"` // snippet ID is of no use on client side for now
     TimeExpired     int64   `json:"timeExpired"`
