@@ -13,8 +13,9 @@ import {
   Tag,
 } from 'bloomer';
 
+import { nonNull } from './common';
+
 const log = console,
-  VOIDS = [undefined, null],
   MODE_TO_PRISM_LANG = {
     python: 'python',
     golang: 'go',
@@ -22,10 +23,6 @@ const log = console,
     javascript: 'javascript',
     text: 'textile',
 };
-
-function nonNull(obj) {
-  return VOIDS.indexOf(obj) == -1;
-}
 
 function modeToPrismLang(mode) {
   return MODE_TO_PRISM_LANG[mode];

@@ -6,7 +6,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "webpack --mode development",
     "build": "webpack --mode production",
-    "start": "webpack-dev-server --port 5000 --host 0.0.0.0 --mode production"
+    "start": "webpack-dev-server --port 5000 --host 0.0.0.0 --mode development"
   },
   "keywords": [],
   "author": "",
@@ -34,7 +34,9 @@
     "typescript": "^3.1.6",
     "webpack": "^4.26.0",
     "webpack-cli": "^3.1.2",
-    "webpack-dev-server": "^3.1.10"
+    "webpack-dev-server": "^3.1.14"
   },
-  "dependencies": {}
+  "dependencies": {
+    "react-transition-group": "^2.5.2"
+  }
 }

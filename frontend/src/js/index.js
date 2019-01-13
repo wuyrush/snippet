@@ -3,6 +3,8 @@ import React, { Component } from 'react';
 import ReactDOM from 'react-dom';
 import brace from 'brace';
 import AceEditor from 'react-ace';
+import { Transition } from 'react-transition-group';
+
 
 // Bloomer for React Bulma boilerplates
 import {
@@ -21,6 +23,8 @@ import {
   Notification,
 } from 'bloomer';
 
+import { nonNull } from './common';
+
 const log = console,
 // TODO: at some point we need to figure out how to dynamically import these modes and themes
 // otherwise the editor page will be loaded with too much unnecessary stuff(though the user might
@@ -37,10 +41,6 @@ themes.forEach(theme => {
   require(`brace/theme/${theme}`);
 });
 
-function nonNull(obj) {
-  return [undefined, null].indexOf(obj) == -1;
-}
-
 class SnippetEditorContainer extends Component {
   constructor(props) {
     super(props);
@@ -50,6 +50,8 @@ class SnippetEditorContainer extends Component {
       mode: 'python',
       theme: 'terminal',
       editorLocked: false,
+      copyClipboardBtnHit: false,
+      copyToClipboardFailed: false,
       notification: null, // bloom notification. ex: { color: 'success', message: 'snippet saved.' }
       savedSnippets: [],  // list of ids of saved snippets
     };
@@ -62,6 +64,10 @@ class SnippetEditorContainer extends Component {
     this.handleChange = this.handleChange.bind(this);
     this.handleEditorTextChange = this.handleEditorTextChange.bind(this);
     this.handleSubmit = this.handleSubmit.bind(this);
+    this.handleLockEditor = this.handleLockEditor.bind(this);
+    this.handleClearEditor = this.handleClearEditor.bind(this);
+    this.handleCopyToClipboard = this.handleCopyToClipboard.bind(this);
+    this.handleCopyToClipboardNotificationExit = this.handleCopyToClipboardNotificationExit.bind(this);
   }
 
   // general purpose handler for inputs like text / select / Checkbox etc. The idea is container
@@ -122,6 +128,30 @@ class SnippetEditorContainer extends Component {
     });
   }
 
+  handleLockEditor(event) {
+    this.setState((state, props) => ({ editorLocked: !state.editorLocked }));
+  }
+
+  handleClearEditor(event) {
+    this.setState({ snippetText: '' });
+  }
+
+  handleCopyToClipboard(event) {
+    navigator.clipboard.writeText(this.state.snippetText).then(
+      () => {
+        log.debug('Snippet data copied to clipboard');
+        this.setState({ copyClipboardBtnHit: true });
+      },
+      err => {
+        this.setState({ copyToClipboardFailed: true })
+      }
+    )
+  }
+
+  handleCopyToClipboardNotificationExit(event) {
+    this.setState({ copyClipboardBtnHit: false });
+  }
+
   render() {
     let savedSnippetsJSX = null,
       savedSnippets = this.state.savedSnippets;
@@ -131,7 +161,7 @@ class SnippetEditorContainer extends Component {
         <br />
         {
           [...savedSnippets].reverse().map(sid => (
-          <Notification isColor='primary'>
+          <Notification isColor='primary' key={sid}>
             <a href={"/view/" + sid}>Click to view saved snippet {sid}</a>
           </Notification>
           ))
@@ -173,6 +203,7 @@ class SnippetEditorContainer extends Component {
             theme={this.state.theme}
             text={this.state.snippetText}
             handleChange={this.handleEditorTextChange}
+            readOnly={this.state.editorLocked} 
           />
           <br/>
           <Columns isGrid>
@@ -180,19 +211,47 @@ class SnippetEditorContainer extends Component {
               <Button isColor="link" type="submit">Save</Button>
             </Column>
             <Column isSize="narrow">
-              <Button isColor="primary">Lock</Button>
+              <Button
+                isColor="primary"
+                onClick={this.handleLockEditor}
+              >
+                {this.state.editorLocked ? 'Unlock' : 'Lock'}
+              </Button>
             </Column>
             <Column isSize="narrow">
-              <Button isColor="primary">Clear</Button>
-            </Column>
-            <Column isSize="narrow">
-              <Button isColor="primary">Copy to clipboard</Button>
+              <Button
+                isColor="primary"
+                onClick={this.handleCopyToClipboard}
+              >
+                Copy to clipboard
+              </Button>
             </Column>
             <Column isSize="narrow">
               <Button isColor="primary">Download</Button>
             </Column>
+            <Column isSize="narrow">
+              <Button
+                isColor="danger"
+                onClick={this.handleClearEditor}
+              >Clear</Button>
+            </Column>
           </Columns>
         </form>
+        <Transition
+          in={this.state.copyClipboardBtnHit}
+          onEntered={this.handleCopyToClipboardNotificationExit}
+          timeout={500}
+          unmountOnExit
+        >
+          <Container>
+            <br />
+            <Notification
+              isColor={this.state.copyToClipboardFailed ? 'danger' : 'success'}
+            >
+              {this.state.copyToClipboardFailed ? 'Failed to copy snippet to clipboard' : 'Copied to clipboard.'}
+            </Notification>
+          </Container>
+        </Transition>
         {this.state.savedSnippets.length != 0 && savedSnippetsJSX}
       </Container>
     )
@@ -259,6 +318,7 @@ function SnippetEditorInput(props) {
         width='100%'
         fontSize={14}
         editorProps={{$blockScrolling: true}}
+        readOnly={props.readOnly}
       />
     </Container>
   )
